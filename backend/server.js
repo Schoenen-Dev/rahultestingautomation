@@ -97,7 +97,7 @@
 //   console.log("Server running on port 5000");
 // });
 
-// the latest updated
+// the latest updated the status updated code can be replace successfully
 
 const express = require("express");
 const cors = require("cors");
@@ -108,8 +108,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const bots = {};
-const logs = {}; // store logs per bot name
+const bots = {};   // { name: childProcess }
+const logs = {};   // { name: [ "line1", "line2", ... ] }
 
 const users = [
   "ani",
@@ -127,7 +127,7 @@ const users = [
   "Sergio"
 ];
 
-// Helper: capture output from a spawned bot process
+// Helper: spawn a bot and capture its output into logs[]
 function spawnBot(name) {
   if (!logs[name]) logs[name] = [];
 
@@ -144,9 +144,35 @@ function spawnBot(name) {
     logs[name].push("[ERR] " + data.toString());
   });
 
+  proc.on("exit", (code) => {
+    logs[name].push(`[EXIT] Process exited with code ${code}`);
+    delete bots[name];
+  });
+
   return proc;
 }
 
+// ── GET /status ──────────────────────────────────
+// Returns { ani: "running"|"stopped", george: "running"|"stopped", ... }
+app.get("/status", (req, res) => {
+  const status = {};
+  users.forEach(name => {
+    status[name] = bots[name] ? "running" : "stopped";
+  });
+  res.json(status);
+});
+
+// ── GET /logs/:name ──────────────────────────────
+// Returns { logs: [...], total: N }
+app.get("/logs/:name", (req, res) => {
+  const name = req.params.name;
+  const since = parseInt(req.query.since) || 0;
+  const botLogs = logs[name] || [];
+  const newLogs = botLogs.slice(since);
+  res.json({ logs: newLogs, total: botLogs.length });
+});
+
+// ── POST /start/:name ────────────────────────────
 app.post("/start/:name", (req, res) => {
   const name = req.params.name;
 
@@ -155,10 +181,10 @@ app.post("/start/:name", (req, res) => {
   }
 
   bots[name] = spawnBot(name);
-
   res.json({ message: `${name} started` });
 });
 
+// ── POST /stop/:name ─────────────────────────────
 app.post("/stop/:name", (req, res) => {
   const name = req.params.name;
 
@@ -170,7 +196,8 @@ app.post("/stop/:name", (req, res) => {
   res.json({ message: `${name} stopped` });
 });
 
-app.post("/start-all", async (req, res) => {
+// ── POST /start-all ──────────────────────────────
+app.post("/start-all", (req, res) => {
   users.forEach((user, index) => {
     setTimeout(() => {
       if (!bots[user]) {
@@ -182,6 +209,7 @@ app.post("/start-all", async (req, res) => {
   res.json({ message: "All started" });
 });
 
+// ── POST /stop-all ───────────────────────────────
 app.post("/stop-all", (req, res) => {
   Object.keys(bots).forEach(user => {
     bots[user].kill();
@@ -191,16 +219,7 @@ app.post("/stop-all", (req, res) => {
   res.json({ message: "All stopped" });
 });
 
-// FIX: Added /logs/:name route — required by the frontend
-app.get("/logs/:name", (req, res) => {
-  const name = req.params.name;
-  const since = parseInt(req.query.since) || 0;
-  const botLogs = logs[name] || [];
-  const newLogs = botLogs.slice(since);
-  res.json({ logs: newLogs, total: botLogs.length });
-});
-
-// FIX: Use process.env.PORT for Render (not hardcoded 5000)
+// ── Start server ─────────────────────────────────
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
