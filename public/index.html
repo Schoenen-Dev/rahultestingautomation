@@ -44,12 +44,19 @@
       transition:transform .15s,filter .15s;
     }
     .top-actions button:hover{transform:scale(1.04);filter:brightness(1.15);}
+    .top-actions button:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
     .btn-run-all {background:var(--green);color:#000;}
     .btn-stop-all{background:var(--red); color:#fff;}
     .status-badge{
       font-size:13px;color:var(--muted);
       padding:6px 14px;border:1px solid var(--border);border-radius:20px;
     }
+    .connection-status{
+      font-size:12px;padding:4px 12px;border-radius:16px;
+      display:inline-block;margin-left:8px;
+    }
+    .connection-status.connected{background:#00e67644;color:var(--green);border:1px solid var(--green);}
+    .connection-status.disconnected{background:#ff174444;color:var(--red);border:1px solid var(--red);}
 
     /* ── Main layout ── */
     main{padding:28px;display:grid;grid-template-columns:1fr 360px;gap:24px;}
@@ -98,7 +105,8 @@
       font-size:13px;font-weight:600;cursor:pointer;
       transition:filter .15s,transform .15s;
     }
-    .card-btns button:hover{filter:brightness(1.18);transform:scale(1.04);}
+    .card-btns button:hover:not(:disabled){filter:brightness(1.18);transform:scale(1.04);}
+    .card-btns button:disabled{opacity:0.5;cursor:not-allowed;}
     .btn-run {background:#00c9b1;color:#000;}
     .btn-stop{background:#d32f2f;color:#fff;}
     .btn-log {background:#1e3a5f;color:var(--cyan);width:100%;margin-top:8px;
@@ -131,6 +139,7 @@
       transition:border-color .15s, color .15s;
     }
     .log-actions button:hover{border-color:var(--cyan);color:var(--cyan);}
+    .log-actions button:disabled{opacity:0.5;cursor:not-allowed;}
 
     .log-body{
       flex:1;overflow-y:auto;
@@ -171,16 +180,32 @@
       header{flex-direction:column;gap:12px;align-items:flex-start;}
       .grid{grid-template-columns:1fr 1fr;}
     }
+
+    /* ── Toast Notifications ── */
+    .toast{
+      position:fixed;bottom:24px;right:24px;
+      background:var(--card);border:1px solid var(--border);
+      border-radius:8px;padding:12px 18px;
+      box-shadow:0 4px 20px rgba(0,0,0,.3);
+      z-index:1000;animation:slideIn .3s ease;
+      max-width:320px;
+    }
+    .toast.success{border-left:4px solid var(--green);}
+    .toast.error{border-left:4px solid var(--red);}
+    @keyframes slideIn{from{transform:translateX(400px);opacity:0;}to{transform:translateX(0);opacity:1;}}
   </style>
 </head>
 <body>
 
 <header>
-  <h1>🤖 Bot Control <span>Panel</span></h1>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <h1>🤖 Bot Control <span>Panel</span></h1>
+    <span class="connection-status disconnected" id="connection-status">● Connecting...</span>
+  </div>
   <div class="top-actions">
     <span class="status-badge" id="running-count">0 / 13 running</span>
-    <button class="btn-run-all"  onclick="runAll()">▶ Run All</button>
-    <button class="btn-stop-all" onclick="stopAll()">⏹ Stop All</button>
+    <button class="btn-run-all" id="run-all-btn" onclick="runAll()" disabled>▶ Run All</button>
+    <button class="btn-stop-all" id="stop-all-btn" onclick="stopAll()" disabled>⏹ Stop All</button>
   </div>
 </header>
 
@@ -196,8 +221,8 @@
         <small id="log-sub">Click a bot to view its logs</small>
       </div>
       <div class="log-actions">
-        <button onclick="clearLogs()">🗑 Clear</button>
-        <button onclick="downloadLogs()">⬇ Save</button>
+        <button onclick="clearLogs()" id="clear-logs-btn" disabled>🗑 Clear</button>
+        <button onclick="downloadLogs()" id="download-logs-btn" disabled>⬇ Save</button>
       </div>
     </div>
     <div class="log-body" id="log-body">
@@ -216,7 +241,7 @@
 // ─────────────────────────────────────────────────
 // Config
 // ─────────────────────────────────────────────────
-const BASE   = "";          // relative — works on Railway, Vercel proxy, or localhost
+const API_BASE = "https://rahultestingautomation.onrender.com";
 const USERS  = [
   "ani","george","jessica","kevin","mansion",
   "rigan","sam","susan","mathews",
@@ -232,6 +257,7 @@ let logCache      = {};   // { name: string[] }
 let statusCache   = {};   // { name: "running"|"stopped"|"error" }
 let statusPollId  = null;
 let logPollId     = null;
+let isConnected   = false;
 
 // ─────────────────────────────────────────────────
 // Build cards
@@ -253,8 +279,8 @@ function buildGrid() {
         <span class="dot stopped" id="dot-${user}"></span>
       </div>
       <div class="card-btns">
-        <button class="btn-run"  onclick="runUser('${user}',event)">▶ Run</button>
-        <button class="btn-stop" onclick="stopUser('${user}',event)">⏹ Stop</button>
+        <button class="btn-run" id="run-${user}" onclick="runUser('${user}',event)" disabled>▶ Run</button>
+        <button class="btn-stop" id="stop-${user}" onclick="stopUser('${user}',event)" disabled>⏹ Stop</button>
       </div>
       <button class="btn-log" onclick="selectBot('${user}',event)">📋 View Logs</button>
     `;
@@ -263,33 +289,166 @@ function buildGrid() {
 }
 
 // ─────────────────────────────────────────────────
+// Toast notifications
+// ─────────────────────────────────────────────────
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ─────────────────────────────────────────────────
+// Connection status
+// ─────────────────────────────────────────────────
+function updateConnectionStatus(connected) {
+  isConnected = connected;
+  const statusEl = document.getElementById('connection-status');
+  const runAllBtn = document.getElementById('run-all-btn');
+  const stopAllBtn = document.getElementById('stop-all-btn');
+  
+  if (connected) {
+    statusEl.textContent = '● Connected';
+    statusEl.className = 'connection-status connected';
+    runAllBtn.disabled = false;
+    stopAllBtn.disabled = false;
+    
+    // Enable all bot buttons
+    USERS.forEach(user => {
+      document.getElementById(`run-${user}`).disabled = false;
+      document.getElementById(`stop-${user}`).disabled = false;
+    });
+  } else {
+    statusEl.textContent = '● Disconnected';
+    statusEl.className = 'connection-status disconnected';
+    runAllBtn.disabled = true;
+    stopAllBtn.disabled = true;
+    
+    // Disable all bot buttons
+    USERS.forEach(user => {
+      document.getElementById(`run-${user}`).disabled = true;
+      document.getElementById(`stop-${user}`).disabled = true;
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────
 // API helpers
 // ─────────────────────────────────────────────────
 async function api(method, path) {
   try {
-    const r = await fetch(BASE + path, { method });
-    return r.ok ? await r.json() : null;
-  } catch(e) { return null; }
+    const r = await fetch(API_BASE + path, { 
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}`);
+    }
+    
+    updateConnectionStatus(true);
+    return await r.json();
+  } catch(e) {
+    console.error('API Error:', e);
+    updateConnectionStatus(false);
+    showToast(`Connection error: ${e.message}`, 'error');
+    return null;
+  }
 }
 
 async function runUser(user, e) {
   if(e) e.stopPropagation();
+  if(!isConnected) {
+    showToast('Not connected to server', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById(`run-${user}`);
+  btn.disabled = true;
+  btn.textContent = '⏳ Starting...';
+  
   const res = await api("POST", `/start/${user}`);
-  if(res) flashCard(user, "green");
+  
+  btn.disabled = false;
+  btn.textContent = '▶ Run';
+  
+  if(res && res.status === 'success') {
+    flashCard(user, "green");
+    showToast(`Bot ${user} started successfully`, 'success');
+  } else {
+    showToast(`Failed to start bot ${user}`, 'error');
+  }
 }
 
 async function stopUser(user, e) {
   if(e) e.stopPropagation();
+  if(!isConnected) {
+    showToast('Not connected to server', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById(`stop-${user}`);
+  btn.disabled = true;
+  btn.textContent = '⏳ Stopping...';
+  
   const res = await api("POST", `/stop/${user}`);
-  if(res) flashCard(user, "red");
+  
+  btn.disabled = false;
+  btn.textContent = '⏹ Stop';
+  
+  if(res && res.status === 'success') {
+    flashCard(user, "red");
+    showToast(`Bot ${user} stopped successfully`, 'success');
+  } else {
+    showToast(`Failed to stop bot ${user}`, 'error');
+  }
 }
 
 async function runAll() {
-  await api("POST", "/start-all");
+  if(!isConnected) {
+    showToast('Not connected to server', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById('run-all-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Starting All...';
+  
+  const res = await api("POST", "/start-all");
+  
+  btn.disabled = false;
+  btn.textContent = '▶ Run All';
+  
+  if(res && res.status === 'success') {
+    showToast('All bots started successfully', 'success');
+  } else {
+    showToast('Failed to start all bots', 'error');
+  }
 }
 
 async function stopAll() {
-  await api("POST", "/stop-all");
+  if(!isConnected) {
+    showToast('Not connected to server', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById('stop-all-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Stopping All...';
+  
+  const res = await api("POST", "/stop-all");
+  
+  btn.disabled = false;
+  btn.textContent = '⏹ Stop All';
+  
+  if(res && res.status === 'success') {
+    showToast('All bots stopped successfully', 'success');
+  } else {
+    showToast('Failed to stop all bots', 'error');
+  }
 }
 
 // ─────────────────────────────────────────────────
@@ -298,6 +457,7 @@ async function stopAll() {
 async function pollStatus() {
   const data = await api("GET", "/status");
   if (!data) return;
+  
   let running = 0;
   USERS.forEach(u => {
     const st = data[u] || "stopped";
@@ -324,6 +484,10 @@ function selectBot(name, e) {
   document.getElementById("log-title").textContent = `📋 ${name} — Logs`;
   document.getElementById("log-sub").textContent   = "Live tail — updates every 2 s";
   document.getElementById("log-body").innerHTML    = "";
+  
+  // Enable log buttons
+  document.getElementById("clear-logs-btn").disabled = false;
+  document.getElementById("download-logs-btn").disabled = false;
 
   // Render any cached lines immediately
   if(logCache[name]?.length) renderLines(logCache[name]);
@@ -333,11 +497,11 @@ function selectBot(name, e) {
 }
 
 async function fetchLogs(name, reset) {
-  if(!name) return;
+  if(!name || !isConnected) return;
   if(reset) logCursors[name] = 0;
   const since = logCursors[name] || 0;
   try {
-    const r = await fetch(`${BASE}/logs/${name}?since=${since}`);
+    const r = await fetch(`${API_BASE}/logs/${name}?since=${since}`);
     if(!r.ok) return;
     const data = await r.json();
     if(data.lines?.length) {
@@ -346,7 +510,9 @@ async function fetchLogs(name, reset) {
       if(selectedBot === name) renderLines(data.lines);
       logCursors[name] = data.total;
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('Log fetch error:', e);
+  }
 }
 
 function renderLines(lines) {
@@ -378,12 +544,16 @@ function classifyLine(line) {
 }
 
 async function clearLogs() {
-  if(!selectedBot) return;
-  await api("DELETE", `/logs/${selectedBot}`);
-  logCache[selectedBot] = [];
-  logCursors[selectedBot] = 0;
-  document.getElementById("log-body").innerHTML = '<div class="log-empty">Logs cleared.</div>';
-  document.getElementById("log-line-count").textContent = "0 lines";
+  if(!selectedBot || !isConnected) return;
+  
+  const res = await api("DELETE", `/logs/${selectedBot}`);
+  if(res) {
+    logCache[selectedBot] = [];
+    logCursors[selectedBot] = 0;
+    document.getElementById("log-body").innerHTML = '<div class="log-empty">Logs cleared.</div>';
+    document.getElementById("log-line-count").textContent = "0 lines";
+    showToast(`Logs cleared for ${selectedBot}`, 'success');
+  }
 }
 
 function downloadLogs() {
@@ -393,6 +563,7 @@ function downloadLogs() {
   a.href = `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`;
   a.download = `${selectedBot}-logs-${Date.now()}.txt`;
   a.click();
+  showToast(`Logs downloaded for ${selectedBot}`, 'success');
 }
 
 // ─────────────────────────────────────────────────
@@ -425,6 +596,13 @@ function startPolling() {
 // ─────────────────────────────────────────────────
 buildGrid();
 startPolling();
+
+// Initial connection check
+setTimeout(() => {
+  if(!isConnected) {
+    showToast('Connecting to backend server...', 'info');
+  }
+}, 1000);
 </script>
 </body>
 </html>
