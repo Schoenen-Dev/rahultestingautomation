@@ -15,7 +15,7 @@ function minutesSince(date) {
 
 (async function run() {
   // --------- Configure Chrome options ---------
-  const options = new chrome.Options();
+const options = new chrome.Options();
 
 options.addArguments("--headless=new");
 options.addArguments("--no-sandbox");
@@ -26,7 +26,11 @@ options.addArguments("--window-size=1280,900");
   // options.headless(); 
   // optional: disable images to save bandwidth (uncomment if desired)
   // options.addArguments("--blink-settings=imagesEnabled=false");
-
+// ADD THIS LINE — tells Selenium where Chrome is on Render
+if (process.env.CHROME_BIN) {
+  options.setChromeBinaryPath(process.env.CHROME_BIN);
+}
+// the above line 30 and 33 can be added for the yamal setup
   let driver = await new Builder().forBrowser("chrome").setChromeOptions(options).build();
   let lastLoginTime = Date.now();
   let lastRefresh = Date.now();
