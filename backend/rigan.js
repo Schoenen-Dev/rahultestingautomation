@@ -48,6 +48,12 @@ function isZipAllowed(zip) {
 (async function run() {
   // --------- Configure Chrome options ---------
   const options = new chrome.Options();
+
+options.addArguments("--headless=new");
+options.addArguments("--no-sandbox");
+options.addArguments("--disable-dev-shm-usage");
+options.addArguments("--disable-gpu");
+options.addArguments("--window-size=1280,900");
   // run headless? comment out if you want to see the browser
   // options.headless(); 
   // optional: disable images to save bandwidth (uncomment if desired)
