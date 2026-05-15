@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Bot Control Panel</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;}
+
+    :root{
+      --bg:        #0a0f1e;
+      --surface:   #111827;
+      --card:      #1a2235;
+      --border:    #1e3a5f;
+      --cyan:      #00e5ff;
+      --green:     #00e676;
+      --red:       #ff1744;
+      --yellow:    #ffea00;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --log-bg:    #060d1a;
+    }
+
+    body{background:var(--bg);color:var(--text);min-height:100vh;}
+
+    /* ── Header ── */
+    header{
+      background:var(--surface);
+      border-bottom:1px solid var(--border);
+      padding:16px 28px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      position:sticky;top:0;z-index:100;
+      box-shadow:0 2px 20px rgba(0,229,255,.08);
+    }
+    header h1{font-size:20px;font-weight:700;letter-spacing:1px;color:var(--cyan);}
+    header h1 span{color:var(--text);font-weight:300;}
+
+    .top-actions{display:flex;gap:12px;align-items:center;}
+    .top-actions button{
+      padding:9px 22px;border:none;border-radius:8px;
+      cursor:pointer;font-size:14px;font-weight:600;
+      transition:transform .15s,filter .15s;
+    }
+    .top-actions button:hover{transform:scale(1.04);filter:brightness(1.15);}
+    .btn-run-all {background:var(--green);color:#000;}
+    .btn-stop-all{background:var(--red); color:#fff;}
+    .status-badge{
+      font-size:13px;color:var(--muted);
+      padding:6px 14px;border:1px solid var(--border);border-radius:20px;
+    }
+
+    /* ── Main layout ── */
+    main{padding:28px;display:grid;grid-template-columns:1fr 360px;gap:24px;}
+
+    /* ── Bot Grid ── */
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+      gap:16px;
+      align-content:start;
+    }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:18px;
+      cursor:pointer;
+      transition:border-color .2s, box-shadow .2s, transform .15s;
+      position:relative;
+      user-select:none;
+    }
+    .card:hover{
+      border-color:var(--cyan);
+      box-shadow:0 0 18px rgba(0,229,255,.18);
+      transform:translateY(-2px);
+    }
+    .card.selected{
+      border-color:var(--cyan);
+      box-shadow:0 0 22px rgba(0,229,255,.28);
+    }
+
+    .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+    .card-name{font-size:16px;font-weight:700;text-transform:capitalize;}
+    .dot{
+      width:10px;height:10px;border-radius:50%;flex-shrink:0;
+      transition:background .3s;
+    }
+    .dot.running {background:var(--green);box-shadow:0 0 8px var(--green);}
+    .dot.stopped {background:var(--muted);}
+    .dot.error   {background:var(--red);  box-shadow:0 0 8px var(--red);}
+
+    .card-btns{display:flex;gap:8px;}
+    .card-btns button{
+      flex:1;padding:8px 0;border:none;border-radius:7px;
+      font-size:13px;font-weight:600;cursor:pointer;
+      transition:filter .15s,transform .15s;
+    }
+    .card-btns button:hover{filter:brightness(1.18);transform:scale(1.04);}
+    .btn-run {background:#00c9b1;color:#000;}
+    .btn-stop{background:#d32f2f;color:#fff;}
+    .btn-log {background:#1e3a5f;color:var(--cyan);width:100%;margin-top:8px;
+              border:none;border-radius:7px;padding:7px 0;font-size:12px;font-weight:600;
+              cursor:pointer;transition:background .15s;}
+    .btn-log:hover{background:#1a4a7a;}
+
+    /* ── Log Panel ── */
+    .log-panel{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:14px;
+      display:flex;flex-direction:column;
+      height:calc(100vh - 120px);
+      position:sticky;top:88px;
+      overflow:hidden;
+    }
+    .log-header{
+      padding:14px 18px;
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;
+      flex-shrink:0;
+    }
+    .log-title{font-size:15px;font-weight:700;color:var(--cyan);}
+    .log-title small{color:var(--muted);font-weight:400;font-size:12px;}
+    .log-actions{display:flex;gap:8px;}
+    .log-actions button{
+      background:none;border:1px solid var(--border);color:var(--muted);
+      border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+      transition:border-color .15s, color .15s;
+    }
+    .log-actions button:hover{border-color:var(--cyan);color:var(--cyan);}
+
+    .log-body{
+      flex:1;overflow-y:auto;
+      font-family:'Courier New',monospace;font-size:12px;line-height:1.6;
+      background:var(--log-bg);padding:12px 14px;
+      color:#94a3b8;
+    }
+    .log-body::-webkit-scrollbar{width:6px;}
+    .log-body::-webkit-scrollbar-track{background:var(--log-bg);}
+    .log-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+    .log-line{border-bottom:1px solid rgba(255,255,255,.03);padding:2px 0;}
+    .log-line.err {color:#f87171;}
+    .log-line.info{color:#7dd3fc;}
+    .log-line.ok  {color:#86efac;}
+    .log-line.warn{color:#fde68a;}
+
+    .log-empty{
+      color:var(--muted);text-align:center;
+      margin-top:40px;font-size:13px;
+    }
+
+    .log-footer{
+      padding:10px 18px;border-top:1px solid var(--border);
+      font-size:11px;color:var(--muted);
+      display:flex;align-items:center;justify-content:space-between;
+      flex-shrink:0;
+    }
+    .auto-scroll-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;}
+    .auto-scroll-toggle input{cursor:pointer;}
+
+    /* ── Responsive ── */
+    @media(max-width:900px){
+      main{grid-template-columns:1fr;}
+      .log-panel{height:420px;position:static;}
+    }
+    @media(max-width:520px){
+      header{flex-direction:column;gap:12px;align-items:flex-start;}
+      .grid{grid-template-columns:1fr 1fr;}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 Bot Control <span>Panel</span></h1>
+  <div class="top-actions">
+    <span class="status-badge" id="running-count">0 / 13 running</span>
+    <button class="btn-run-all"  onclick="runAll()">▶ Run All</button>
+    <button class="btn-stop-all" onclick="stopAll()">⏹ Stop All</button>
+  </div>
+</header>
+
+<main>
+  <!-- Bot cards -->
+  <div class="grid" id="bot-grid"></div>
+
+  <!-- Log panel -->
+  <div class="log-panel">
+    <div class="log-header">
+      <div>
+        <div class="log-title" id="log-title">📋 Logs</div>
+        <small id="log-sub">Click a bot to view its logs</small>
+      </div>
+      <div class="log-actions">
+        <button onclick="clearLogs()">🗑 Clear</button>
+        <button onclick="downloadLogs()">⬇ Save</button>
+      </div>
+    </div>
+    <div class="log-body" id="log-body">
+      <div class="log-empty">Select a bot card to tail its logs in real-time.</div>
+    </div>
+    <div class="log-footer">
+      <span id="log-line-count">0 lines</span>
+      <label class="auto-scroll-toggle">
+        <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+      </label>
+    </div>
+  </div>
+</main>
+
+<script>
+// ─────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────
+const BASE   = "";          // relative — works on Railway, Vercel proxy, or localhost
+const USERS  = [
+  "ani","george","jessica","kevin","mansion",
+  "rigan","sam","susan","mathews",
+  "rodney1","rodney2","rodney3","Sergio"
+];
+
+// ─────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────
+let selectedBot   = null;
+let logCursors    = {};   // { name: lineCount }
+let logCache      = {};   // { name: string[] }
+let statusCache   = {};   // { name: "running"|"stopped"|"error" }
+let statusPollId  = null;
+let logPollId     = null;
+
+// ─────────────────────────────────────────────────
+// Build cards
+// ─────────────────────────────────────────────────
+function buildGrid() {
+  const grid = document.getElementById("bot-grid");
+  grid.innerHTML = "";
+  USERS.forEach(user => {
+    logCursors[user] = 0;
+    logCache[user]   = [];
+    statusCache[user]= "stopped";
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id        = `card-${user}`;
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="card-name">${user}</span>
+        <span class="dot stopped" id="dot-${user}"></span>
+      </div>
+      <div class="card-btns">
+        <button class="btn-run"  onclick="runUser('${user}',event)">▶ Run</button>
+        <button class="btn-stop" onclick="stopUser('${user}',event)">⏹ Stop</button>
+      </div>
+      <button class="btn-log" onclick="selectBot('${user}',event)">📋 View Logs</button>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ─────────────────────────────────────────────────
+// API helpers
+// ─────────────────────────────────────────────────
+async function api(method, path) {
+  try {
+    const r = await fetch(BASE + path, { method });
+    return r.ok ? await r.json() : null;
+  } catch(e) { return null; }
+}
+
+async function runUser(user, e) {
+  if(e) e.stopPropagation();
+  const res = await api("POST", `/start/${user}`);
+  if(res) flashCard(user, "green");
+}
+
+async function stopUser(user, e) {
+  if(e) e.stopPropagation();
+  const res = await api("POST", `/stop/${user}`);
+  if(res) flashCard(user, "red");
+}
+
+async function runAll() {
+  await api("POST", "/start-all");
+}
+
+async function stopAll() {
+  await api("POST", "/stop-all");
+}
+
+// ─────────────────────────────────────────────────
+// Status polling
+// ─────────────────────────────────────────────────
+async function pollStatus() {
+  const data = await api("GET", "/status");
+  if (!data) return;
+  let running = 0;
+  USERS.forEach(u => {
+    const st = data[u] || "stopped";
+    statusCache[u] = st;
+    const dot = document.getElementById(`dot-${u}`);
+    if (dot) { dot.className = `dot ${st}`; }
+    if (st === "running") running++;
+  });
+  document.getElementById("running-count").textContent = `${running} / ${USERS.length} running`;
+}
+
+// ─────────────────────────────────────────────────
+// Log panel
+// ─────────────────────────────────────────────────
+function selectBot(name, e) {
+  if(e) e.stopPropagation();
+  selectedBot = name;
+  logCursors[name] = 0;
+
+  document.querySelectorAll(".card").forEach(c => c.classList.remove("selected"));
+  const card = document.getElementById(`card-${name}`);
+  if(card) card.classList.add("selected");
+
+  document.getElementById("log-title").textContent = `📋 ${name} — Logs`;
+  document.getElementById("log-sub").textContent   = "Live tail — updates every 2 s";
+  document.getElementById("log-body").innerHTML    = "";
+
+  // Render any cached lines immediately
+  if(logCache[name]?.length) renderLines(logCache[name]);
+
+  // Fetch fresh
+  fetchLogs(name, true);
+}
+
+async function fetchLogs(name, reset) {
+  if(!name) return;
+  if(reset) logCursors[name] = 0;
+  const since = logCursors[name] || 0;
+  try {
+    const r = await fetch(`${BASE}/logs/${name}?since=${since}`);
+    if(!r.ok) return;
+    const data = await r.json();
+    if(data.lines?.length) {
+      logCache[name] = (logCache[name] || []).concat(data.lines);
+      if(logCache[name].length > 500) logCache[name] = logCache[name].slice(-500);
+      if(selectedBot === name) renderLines(data.lines);
+      logCursors[name] = data.total;
+    }
+  } catch(e) {}
+}
+
+function renderLines(lines) {
+  const body = document.getElementById("log-body");
+  // Remove empty placeholder
+  const empty = body.querySelector(".log-empty");
+  if(empty) empty.remove();
+
+  lines.forEach(line => {
+    const div = document.createElement("div");
+    div.className = "log-line " + classifyLine(line);
+    div.textContent = line;
+    body.appendChild(div);
+  });
+
+  if(document.getElementById("auto-scroll").checked)
+    body.scrollTop = body.scrollHeight;
+
+  const total = body.querySelectorAll(".log-line").length;
+  document.getElementById("log-line-count").textContent = `${total} lines`;
+}
+
+function classifyLine(line) {
+  const l = line.toLowerCase();
+  if(l.includes("err") || l.includes("fail") || l.includes("exception")) return "err";
+  if(l.includes("started") || l.includes("success") || l.includes("accepted") || l.includes("▶")) return "ok";
+  if(l.includes("warn") || l.includes("skip") || l.includes("retry")) return "warn";
+  return "info";
+}
+
+async function clearLogs() {
+  if(!selectedBot) return;
+  await api("DELETE", `/logs/${selectedBot}`);
+  logCache[selectedBot] = [];
+  logCursors[selectedBot] = 0;
+  document.getElementById("log-body").innerHTML = '<div class="log-empty">Logs cleared.</div>';
+  document.getElementById("log-line-count").textContent = "0 lines";
+}
+
+function downloadLogs() {
+  if(!selectedBot) return;
+  const text = (logCache[selectedBot] || []).join("\n");
+  const a = document.createElement("a");
+  a.href = `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`;
+  a.download = `${selectedBot}-logs-${Date.now()}.txt`;
+  a.click();
+}
+
+// ─────────────────────────────────────────────────
+// Visual flash feedback
+// ─────────────────────────────────────────────────
+function flashCard(name, colour) {
+  const card = document.getElementById(`card-${name}`);
+  if(!card) return;
+  card.style.transition = "box-shadow .1s";
+  card.style.boxShadow  = colour === "green"
+    ? "0 0 24px 4px rgba(0,230,118,.5)"
+    : "0 0 24px 4px rgba(255,23,68,.5)";
+  setTimeout(() => { card.style.boxShadow = ""; }, 600);
+}
+
+// ─────────────────────────────────────────────────
+// Master polling loop
+// ─────────────────────────────────────────────────
+function startPolling() {
+  pollStatus();
+  statusPollId = setInterval(pollStatus, 3000);
+
+  logPollId = setInterval(() => {
+    if(selectedBot) fetchLogs(selectedBot, false);
+  }, 2000);
+}
+
+// ─────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────
+buildGrid();
+startPolling();
+</script>
+</body>
+</html>
